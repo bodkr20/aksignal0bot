@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-BOT_TOKEN = "8754472585:AAGIX510vMHTRCTJaGVdnsjn8HjcPqq9-HQ"
+BOT_TOKEN = "8764163505:AAHDcE7Ilby66k6VLwOmDFxuQ7gd29x0msE"
 
 OTC_PAIRS = [
     {"name": "EUR/USD OTC", "flag": "🇪🇺", "symbol": "EURUSD=X"},
@@ -41,12 +41,13 @@ async def fetch_yahoo_candles(symbol: str, count: int = 80):
         params = {"interval": "1m", "range": "1d", "includePrePost": "false"}
         headers = {"User-Agent": "Mozilla/5.0"}
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=params, headers=headers, timeout=10) as resp:
+            async with session.get(url, params=params, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                 if resp.status != 200:
                     return None
                 data = await resp.json()
         result = data.get("chart", {}).get("result", [])
-        if not result: return None
+        if not result:
+            return None
         chart = result[0]
         indicators = chart.get("indicators", {}).get("quote", [{}])[0]
         opens = indicators.get("open", [])
@@ -55,7 +56,8 @@ async def fetch_yahoo_candles(symbol: str, count: int = 80):
         lows = indicators.get("low", [])
         candles = []
         for i in range(len(closes)):
-            if closes[i] is None or opens[i] is None: continue
+            if closes[i] is None or opens[i] is None:
+                continue
             candles.append({
                 "open": opens[i], "close": closes[i],
                 "high": highs[i] if highs[i] else closes[i],
@@ -164,12 +166,23 @@ def get_expiry_keyboard(pair_name, pair_type):
         ]
     return InlineKeyboardMarkup(buttons)
 
+def get_otc_keyboard():
+    keyboard = [[KeyboardButton(f"{p['flag']} {p['name']}")] for p in OTC_PAIRS] + [[KeyboardButton("🔙 رجوع")]]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+def get_live_keyboard():
+    keyboard = [[KeyboardButton(f"{p['flag']} {p['name']}")] for p in LIVE_PAIRS] + [[KeyboardButton("🔙 رجوع")]]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = ReplyKeyboardMarkup([
         [KeyboardButton("📊 OTC Pairs"), KeyboardButton("📈 Live Market")]
     ], resize_keyboard=True)
     await update.message.reply_text(
-        "🤖 *VaultFX Bot*\n"
+        "🤖 *VaultFX Bot*\n━━━━━━━━━━━━━━━━━━\n"
+        "📡 *المصدر:* Yahoo Finance\n"
+        "✅ *بيانات حقيقية*\n"
+        "━━━━━━━━━━━━━━━━━━\n"
         "اختر السوق:",
         parse_mode="Markdown",
         reply_markup=keyboard
@@ -178,15 +191,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     if text == "🔙 رجوع":
-        await update.message.reply_text("🏠 القائمة الرئيسية:", reply_markup=ReplyKeyboardMarkup([[KeyboardButton("📊 OTC Pairs"), KeyboardButton("📈 Live Market")]], resize_keyboard=True))
+        await update.message.reply_text(
+            "🏠 القائمة الرئيسية:",
+            reply_markup=ReplyKeyboardMarkup(
+                [[KeyboardButton("📊 OTC Pairs"), KeyboardButton("📈 Live Market")]],
+                resize_keyboard=True
+            )
+        )
         return
     if text == "📊 OTC Pairs":
-        keyboard = [[KeyboardButton(f"{p['flag']} {p['name']}")] for p in OTC_PAIRS] + [[KeyboardButton("🔙 رجوع")]]
-        await update.message.reply_text("📊 اختر زوج OTC:", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
+        await update.message.reply_text("📊 اختر زوج OTC:", reply_markup=get_otc_keyboard())
         return
     if text == "📈 Live Market":
-        keyboard = [[KeyboardButton(f"{p['flag']} {p['name']}")] for p in LIVE_PAIRS] + [[KeyboardButton("🔙 رجوع")]]
-        await update.message.reply_text("📈 اختر زوج Live:", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
+        await update.message.reply_text("📈 اختر زوج Live:", reply_markup=get_live_keyboard())
         return
     for pair in ALL_PAIRS:
         if pair["name"] in text:
@@ -209,17 +226,19 @@ async def handle_expiry(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ خطأ، حاول مجدداً.")
         return
 
-    await query.edit_message_text(f"{pair['flag']} *{pair_name}* — ⏱ {expiry}\n⏳ جاري التحليل...", parse_mode="Markdown")
+    await query.edit_message_text(
+        f"{pair['flag']} *{pair_name}* — ⏱ {expiry}\n⏳ جاري التحليل...",
+        parse_mode="Markdown"
+    )
 
     candles = await fetch_yahoo_candles(pair["symbol"])
     if not candles or len(candles) < 20:
-        await query.edit_message_text("⚠️ لا توجد بيانات كافية حالياً، حاول لاحقاً.")
+        await query.edit_message_text("⚠️ لا توجد بيانات كافية، حاول لاحقاً.")
         return
 
     result = analyze_candles(candles)
     entry_time, candle_note = get_entry_time()
 
-    # قوة الإشارة
     if result['confidence'] >= 80: rocket = "🚀🚀🚀🚀"
     elif result['confidence'] >= 70: rocket = "🚀🚀🚀"
     elif result['confidence'] >= 60: rocket = "🚀🚀"
@@ -233,7 +252,8 @@ async def handle_expiry(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"⏱ *الفريم:* {expiry}\n"
             f"🚀 *القوة:* {rocket}\n"
             f"💯 *الثقة:* {result['confidence']}%\n"
-            f"📡 *المصدر:* 📡 Yahoo Finance\n"
+            f"📡 *المصدر:* Yahoo Finance\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
             f"⚠️ *لا تدخل الصفقة الآن*"
         )
     else:
@@ -251,7 +271,7 @@ async def handle_expiry(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🚀 *القوة:* {rocket}\n"
             f"💯 *الثقة:* {result['confidence']}%\n"
             f"📌 *الإشارات:* {', '.join(result['signals']) if result['signals'] else 'لا توجد'}\n"
-            f"📡 *المصدر:* 📡 Yahoo Finance\n"
+            f"📡 *المصدر:* Yahoo Finance\n"
             f"━━━━━━━━━━━━━━━━━━\n"
             f"⚠️ _Trade at your own risk_"
         )
@@ -259,20 +279,12 @@ async def handle_expiry(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = get_live_keyboard() if pair_type == "live" else get_otc_keyboard()
     await query.edit_message_text(final_text, parse_mode="Markdown", reply_markup=keyboard)
 
-def get_otc_keyboard():
-    keyboard = [[KeyboardButton(f"{p['flag']} {p['name']}")] for p in OTC_PAIRS] + [[KeyboardButton("🔙 رجوع")]]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-
-def get_live_keyboard():
-    keyboard = [[KeyboardButton(f"{p['flag']} {p['name']}")] for p in LIVE_PAIRS] + [[KeyboardButton("🔙 رجوع")]]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(CallbackQueryHandler(handle_expiry, pattern="^exp\\|"))
-    print("🚀 VaultFX Bot — خفيف وقوي")
+    print("🚀 VaultFX Bot — يعمل مع Yahoo Finance")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
