@@ -12,7 +12,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # ===== توكن البوت (ضعه مباشرة) =====
-BOT_TOKEN = "8754472585:AAGIX510vMHTRCTJaGVdnsjn8HjcPqq9-HQ"
+BOT_TOKEN = "8764163505:AAHDcE7Ilby66k6VLwOmDFxuQ7gd29x0msE"
 
 # ===== SSID حق Pocket Option =====
 PO_SSID = '42["auth",{"sessionToken":"a4cb7bdffb9d586292f6581ca06d58cd","uid":"130213513","lang":"en"}]'
