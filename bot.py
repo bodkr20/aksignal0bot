@@ -14,7 +14,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # التوكن الخاص بالبوت الخاص بك
-BOT_TOKEN = "8764163505:AAHDcE7Ilby66k6VLwOmDFxuQ7gd29x0msE"
+BOT_TOKEN = "8764163505:AAFsir4RExcTTxqA-D-KGTmo_S5kjQxF7zg"
 
 # مصفوفة أزواج الـ OTC الـ 12 المأخوذة من واجهة البوت في الصور
 OTC_PAIRS = [
