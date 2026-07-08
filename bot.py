@@ -3,9 +3,13 @@ import asyncio
 import numpy as np
 import pandas as pd
 import yfinance as yf
+import ssl
 from datetime import datetime, timezone, timedelta
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+
+# ✅ حل مشكلة SSL في Render
+ssl._create_default_https_context = ssl._create_unverified_context
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
