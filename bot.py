@@ -7,7 +7,6 @@ from datetime import datetime, timezone, timedelta
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
-# إعداد الـ Logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -16,14 +15,12 @@ logger = logging.getLogger(__name__)
 
 BOT_TOKEN = "8764163505:AAFsir4RExcTTxqA-D-KGTmo_S5kjQxF7zg"
 
-# ===================== الأزواج (تم التوسع) =====================
+# ===================== الأزواج (تم التعديل) =====================
 
 OTC_PAIRS = [
-    {"name": "AED/CNY OTC", "flag": "🇦🇪", "symbol": "AEDCNY=X"},
-    {"name": "BHD/CNY OTC", "flag": "🇧🇭", "symbol": "BHDCNY=X"},
+    {"name": "EUR/USD OTC", "flag": "🇪🇺", "symbol": "EURUSD=X"},
     {"name": "GBP/USD OTC", "flag": "🇬🇧", "symbol": "GBPUSD=X"},
     {"name": "AUD/CAD OTC", "flag": "🇦🇺", "symbol": "AUDCAD=X"},
-    {"name": "EUR/USD OTC", "flag": "🇪🇺", "symbol": "EURUSD=X"},
     {"name": "AUD/NZD OTC", "flag": "🇦🇺", "symbol": "AUDNZD=X"},
     {"name": "USD/JPY OTC", "flag": "🇺🇸", "symbol": "USDJPY=X"},
     {"name": "USD/CHF OTC", "flag": "🇺🇸", "symbol": "USDCHF=X"},
@@ -33,7 +30,6 @@ OTC_PAIRS = [
     {"name": "NZD/USD OTC", "flag": "🇳🇿", "symbol": "NZDUSD=X"}
 ]
 
-# ✅ تم إضافة أزواج حقيقية جديدة (زي الصورة)
 LIVE_PAIRS = [
     {"name": "EUR/USD", "flag": "🇪🇺", "symbol": "EURUSD=X"},
     {"name": "GBP/USD", "flag": "🇬🇧", "symbol": "GBPUSD=X"},
@@ -57,10 +53,11 @@ def get_real_market_data(symbol, period="5d", interval="1m"):
         ticker = yf.Ticker(symbol)
         df = ticker.history(period=period, interval=interval)
         if df.empty:
+            logger.warning(f"⚠️ لا توجد بيانات لـ {symbol}")
             return None
         return df['Close'].values.tolist()
     except Exception as e:
-        logger.error(f"خطأ في جلب بيانات {symbol}: {e}")
+        logger.error(f"❌ خطأ في جلب بيانات {symbol}: {e}")
         return None
 
 def calculate_rsi(prices, period=14):
@@ -76,7 +73,7 @@ def calculate_rsi(prices, period=14):
 
 def calculate_ema(prices, period):
     if len(prices) < period:
-        return prices[-1]
+        return prices[-1] if prices else 0
     return pd.Series(prices).ewm(span=period, adjust=False).mean().iloc[-1]
 
 def calculate_macd(prices):
@@ -97,7 +94,7 @@ def calculate_bollinger(prices, period=20):
     return sma + 2*std, sma, sma - 2*std
 
 def analyze_market_signals(prices):
-    if prices is None or len(prices) < 30:
+    if prices is None or len(prices) < 20:
         return None
     
     close = prices[-1]
@@ -125,16 +122,14 @@ def analyze_market_signals(prices):
     macd_buy = macd > macd_signal and macd_hist > 0
     macd_sell = macd < macd_signal and macd_hist < 0
     
-    # تجميع النقاط
     buy_score = sum([trend_buy, momentum_buy, breakout_buy, macd_buy])
     sell_score = sum([trend_sell, momentum_sell, breakout_sell, macd_sell])
     
-    # تحديد الإشارة
-    if buy_score >= 3:
+    if buy_score >= 2:
         direction = "BUY 🟢"
         signal_text = "شراء 🟢"
         trend = "صاعد 📈"
-    elif sell_score >= 3:
+    elif sell_score >= 2:
         direction = "SELL 🔴"
         signal_text = "بيع 🔴"
         trend = "هابط 📉"
@@ -143,7 +138,6 @@ def analyze_market_signals(prices):
         signal_text = "انتظار ⏳"
         trend = "محايد ➡️"
     
-    # حساب الثقة
     confidence = min(98, int(60 + (max(buy_score, sell_score) / 4) * 15))
     
     if confidence >= 86:
@@ -153,13 +147,12 @@ def analyze_market_signals(prices):
     else:
         strength = "🚀🚀 (متوسطة)"
     
-    # التصويت
     if direction == "BUY 🟢":
         vote_buy = min(95, 60 + buy_score * 8)
-        vote_sell = 100 - vote_buy
+        vote_sell = max(5, 100 - vote_buy)
     elif direction == "SELL 🔴":
         vote_sell = min(95, 60 + sell_score * 8)
-        vote_buy = 100 - vote_sell
+        vote_buy = max(5, 100 - vote_sell)
     else:
         vote_buy = 50
         vote_sell = 50
@@ -179,7 +172,7 @@ def analyze_market_signals(prices):
         "close": round(close, 5)
     }
 
-# ===================== باقي الكود (نفسه مع تعديل بسيط) =====================
+# ===================== باقي الكود =====================
 
 def get_saudi_execution_time():
     saudi_tz = timezone(timedelta(hours=3))
@@ -282,12 +275,17 @@ async def handle_execution(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("📊 تحليل RSI • EMA • MACD • BB...")
     await asyncio.sleep(0.7)
     
-    # جلب بيانات حقيقية
+    # ✅ جلب بيانات حقيقية
     prices = None
-    if pair_info.get("symbol"):
-        prices = get_real_market_data(pair_info["symbol"])
+    symbol = pair_info.get("symbol")
+    if symbol:
+        prices = get_real_market_data(symbol)
+        if prices:
+            logger.info(f"✅ تم جلب {len(prices)} نقطة بيانات لـ {symbol}")
+        else:
+            logger.warning(f"⚠️ فشل جلب البيانات لـ {symbol}")
     
-    if prices is None:
+    if prices is None or len(prices) < 10:
         await query.edit_message_text("⚠️ تعذر جلب البيانات الحية، جاري استخدام المحاكاة...")
         await asyncio.sleep(1)
         prices = []
