@@ -17,7 +17,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-BOT_TOKEN = "8764163505:AAFsir4RExcTTxqA-D-KGTmo_S5kjQxF7zg"
+BOT_TOKEN = "8764163505:AAGcC-HB-8D36Qdf2XQtPW-P4xS5q02kigE"
 
 # ===================== الأزواج =====================
 
