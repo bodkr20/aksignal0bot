@@ -4,11 +4,14 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 import ssl
+import os
+import sys
 from datetime import datetime, timezone, timedelta
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
-# ✅ حل مشكلة SSL في Render
+# ✅ حل مشكلة SSL و TeleBotHost
+sys.path.append(os.getcwd())
 ssl._create_default_https_context = ssl._create_unverified_context
 
 logging.basicConfig(
@@ -50,35 +53,19 @@ LIVE_PAIRS = [
     {"name": "ETH/USD", "flag": "⟠", "symbol": "ETH-USD"}
 ]
 
-# ===================== تحليل حقيقي من Yahoo Finance (نسخة مضاعفة) =====================
+# ===================== تحليل حقيقي من Yahoo Finance =====================
 
 def get_real_market_data(symbol, period="1d", interval="1m"):
-    """جلب البيانات الحقيقية من Yahoo Finance مع محاولة متعددة"""
     try:
-        # المحاولة الأولى: طريقة عادية
         ticker = yf.Ticker(symbol)
         df = ticker.history(period=period, interval=interval)
-        
         if df.empty:
-            # المحاولة الثانية: طريقة بديلة
-            logger.warning(f"⚠️ المحاولة الأولى فشلت لـ {symbol}، جاري المحاولة مرة أخرى...")
             df = yf.download(symbol, period="1d", interval="1m", progress=False)
-        
         if df.empty:
-            logger.warning(f"⚠️ لا توجد بيانات لـ {symbol}")
             return None
-            
         return df['Close'].values.tolist()
-        
     except Exception as e:
         logger.error(f"❌ خطأ في جلب بيانات {symbol}: {e}")
-        # المحاولة الثالثة: استخدام مصدر بديل
-        try:
-            df = yf.download(symbol, period="5d", interval="1m", progress=False)
-            if not df.empty:
-                return df['Close'].values.tolist()
-        except:
-            pass
         return None
 
 def calculate_rsi(prices, period=14):
@@ -127,16 +114,12 @@ def analyze_market_signals(prices):
     macd, macd_signal, macd_hist = calculate_macd(prices)
     upper, middle, lower = calculate_bollinger(prices)
     
-    # استراتيجيات متعددة
     trend_buy = close > ema9 > ema21
     trend_sell = close < ema9 < ema21
-    
     momentum_buy = rsi < 30 and close > prev_close
     momentum_sell = rsi > 70 and close < prev_close
-    
     breakout_buy = lower is not None and close < lower
     breakout_sell = upper is not None and close > upper
-    
     macd_buy = macd > macd_signal and macd_hist > 0
     macd_sell = macd < macd_signal and macd_hist < 0
     
@@ -190,7 +173,7 @@ def analyze_market_signals(prices):
         "close": round(close, 5)
     }
 
-# ===================== باقي الكود =====================
+# ===================== دوال البوت =====================
 
 def get_saudi_execution_time():
     saudi_tz = timezone(timedelta(hours=3))
@@ -293,22 +276,14 @@ async def handle_execution(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("📊 تحليل RSI • EMA • MACD • BB...")
     await asyncio.sleep(0.7)
     
-    # ✅ جلب بيانات حقيقية
     prices = None
     symbol = pair_info.get("symbol")
     if symbol:
-        logger.info(f"🔄 جاري جلب بيانات {symbol}...")
         prices = get_real_market_data(symbol)
-        if prices:
-            logger.info(f"✅ تم جلب {len(prices)} نقطة بيانات لـ {symbol}")
-        else:
-            logger.warning(f"⚠️ فشل جلب البيانات لـ {symbol}")
     
-    # ✅ إذا فشل جلب البيانات، نستخدم بيانات محاكاة لكن بمؤشرات أقرب للواقع
     if prices is None or len(prices) < 10:
         await query.edit_message_text("⚠️ جاري استخدام بيانات محاكاة ذكية...")
         await asyncio.sleep(1)
-        # محاكاة ذكية تعتمد على الزوج
         base = 1.2000
         if "JPY" in pair_name:
             base = 150.0
@@ -318,12 +293,10 @@ async def handle_execution(update: Update, context: ContextTypes.DEFAULT_TYPE):
             base = 60000.0
         elif "ETH" in pair_name:
             base = 3500.0
-        
         prices = []
         current = base
-        volatility = 0.0015
         for _ in range(60):
-            current += np.random.uniform(-volatility, volatility)
+            current += np.random.uniform(-0.0015, 0.0015)
             prices.append(current)
     
     analysis = analyze_market_signals(prices)
@@ -358,7 +331,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(CallbackQueryHandler(handle_execution, pattern="^exec\\|"))
-    print("🚀 البوت متصل الآن بكامل طاقته التشغيلية على Render!")
+    print("🚀 البوت متصل الآن بكامل طاقته التشغيلية!")
     application.run_polling()
 
 if __name__ == "__main__":
